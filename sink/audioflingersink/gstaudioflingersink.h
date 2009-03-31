@@ -42,11 +42,8 @@ struct _GstAudioFlingerSink {
   AudioFlingerDevice *audioflinger_device;
   gint   bytes_per_sample;
   gfloat m_volume;
-  gint   m_mute;
+  gboolean   m_mute;
   GstCaps *probed_caps;
-  /* dump file's location */
-  gchar *dump_file_location;
-  FILE* dump_file;
 };
 
 struct _GstAudioFlingerSinkClass {
