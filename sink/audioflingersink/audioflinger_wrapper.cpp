@@ -21,9 +21,12 @@
 #include <utils/Log.h>
 #include <AudioFlinger.h>
 #include "audioflinger_wrapper.h"
+#include <glib/glib.h>
 
 using namespace android;
 
+/* commonly used macro */
+#define DEV_TRACK(audiodev) ((AudioTrack *) audiodev->audio_device)
 
 AudioFlingerDevice *
 audioflinger_device_create (int streamType, int channelCount,
@@ -69,22 +72,12 @@ audioflinger_device_create (int streamType, int channelCount,
 int
 audioflinger_device_release (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return -1;
-  }
+  g_return_val_if_fail (audiodev != NULL, 0);
 
-  if (audiodev->audio_device != NULL) {
+  if (audiodev->audio_device != NULL)
     delete ((AudioTrack *) audiodev->audio_device);
-    audiodev->audio_device = NULL;
-  }
-
-  audiodev->streamType = -1;
-  audiodev->channelCount = 0;
-  audiodev->sampleRate = 0;
-  audiodev->bufferCount = 0;
 
   free (audiodev);
-  audiodev = NULL;
 
   return 0;
 }
@@ -93,97 +86,57 @@ audioflinger_device_release (AudioFlingerDevice * audiodev)
 void
 audioflinger_device_start (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return;
-  }
+  g_return_if_fail (audiodev != NULL);
 
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  audiotr->start ();
+  DEV_TRACK(audiodev)->start();
 }
 
 void
 audioflinger_device_stop (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return;
-  }
+  g_return_if_fail (audiodev != NULL);
 
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  audiotr->stop ();
+  DEV_TRACK(audiodev)->stop();
 }
 
 int
 audioflinger_device_stoped (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return -1;
-  }
+  g_return_val_if_fail (audiodev != NULL, 0);
 
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  return ((audiotr->stopped () == true) ? 1 : 0);
+  return (int) DEV_TRACK(audiodev)->stopped ();
 }
 
 void
 audioflinger_device_flush (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return;
-  }
+  g_return_if_fail (audiodev != NULL);
 
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  audiotr->flush ();
+  DEV_TRACK(audiodev)->flush();
 }
 
 void
 audioflinger_device_pause (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return;
-  }
+  g_return_if_fail (audiodev != NULL);
 
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  audiotr->pause ();
+  DEV_TRACK(audiodev)->pause();
 }
 
 void
 audioflinger_device_mute (AudioFlingerDevice * audiodev, int mute)
 {
-  if (audiodev == NULL) {
-    return;
-  }
+  g_return_if_fail (audiodev != NULL);
 
-  AudioTrack *audiotr = NULL;
-  bool mute_bool = false;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-  if (mute == 0) {
-    mute_bool = false;
-  }
-  if (mute == 1) {
-    mute_bool = true;
-  }
-  audiotr->mute (mute_bool);
+  DEV_TRACK(audiodev)->mute((bool) mute);
 }
 
 int
 audioflinger_device_muted (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return -1;
-  }
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
+  g_return_val_if_fail (audiodev != NULL, 0);
 
-  return ((audiotr->muted () == true) ? 1 : 0);
+  return (int) DEV_TRACK(audiodev)->muted ();
 }
 
 
@@ -191,142 +144,73 @@ void
 audioflinger_device_set_volume (AudioFlingerDevice * audiodev, float left,
     float right)
 {
-  if (audiodev == NULL) {
-    return;
-  }
+  g_return_if_fail (audiodev != NULL);
 
-  AudioTrack *audiotr = (AudioTrack *) audiodev->audio_device;
-
-  audiotr->setVolume (left, right);
+  DEV_TRACK(audiodev)->setVolume (left, right);
 }
 
 ssize_t
 audioflinger_device_write (AudioFlingerDevice * audiodev, const void *buffer,
     size_t size)
 {
-  if (audiodev == NULL || buffer == NULL) {
-    return -1;
-  }
+  g_return_val_if_fail (audiodev != NULL, -1);
+  g_return_val_if_fail (buffer != NULL, -1);
 
-  size_t writesize = -1;
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  writesize = audiotr->write (buffer, size);
-
-  return writesize;
+  return DEV_TRACK(audiodev)->write (buffer, size);
 }
 
 int
 audioflinger_device_frameCount (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return -1;
-  }
+  g_return_val_if_fail (audiodev != NULL, -1);
 
-  int framecount = 0;
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  framecount = audiotr->frameCount ();
-
-  return framecount;
+  return DEV_TRACK(audiodev)->frameCount ();
 }
 
 int
 audioflinger_device_frameSize (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return -1;
-  }
+  g_return_val_if_fail (audiodev != NULL, -1);
 
-  int framesize = 0;
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  framesize = audiotr->frameSize ();
-
-  return framesize;
+  return DEV_TRACK(audiodev)->frameSize ();
 }
-
-
 
 int64_t
 audioflinger_device_latency (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return -1;
-  }
+  g_return_val_if_fail (audiodev != NULL, -1);
 
-  nsecs_t latency_time = 0;
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  latency_time = audiotr->latency ();
-
-  return (int64_t) latency_time;
+  return (int64_t) DEV_TRACK(audiodev)->latency();
 }
 
 int
 audioflinger_device_streamType (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return -1;
-  }
+  g_return_val_if_fail (audiodev != NULL, -1);
 
-  int streamtype;
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  streamtype = audiotr->streamType ();
-
-  return streamtype;
+  return DEV_TRACK(audiodev)->streamType();
 }
 
 int
 audioflinger_device_format (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return -1;
-  }
+  g_return_val_if_fail (audiodev != NULL, -1);
 
-  int format;
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  format = audiotr->format ();
-
-  return format;
+  return DEV_TRACK(audiodev)->format();
 }
 
 int
 audioflinger_device_channelCount (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return -1;
-  }
+  g_return_val_if_fail (audiodev != NULL, -1);
 
-  int channelcount;
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  channelcount = audiotr->channelCount ();
-
-  return channelcount;
+  return DEV_TRACK(audiodev)->channelCount();
 }
 
 uint32_t
 audioflinger_device_sampleRate (AudioFlingerDevice * audiodev)
 {
-  if (audiodev == NULL) {
-    return 0;
-  }
+  g_return_val_if_fail (audiodev != NULL, -1);
 
-  uint32_t samplerate;
-  AudioTrack *audiotr = NULL;
-  audiotr = (AudioTrack *) audiodev->audio_device;
-
-  samplerate = audiotr->sampleRate ();
-
-  return samplerate;
+  return DEV_TRACK(audiodev)->sampleRate();
 }
