@@ -527,7 +527,7 @@ beach:
 static gboolean
 plugin_init (GstPlugin * plugin)
 {
-  return gst_element_register (plugin, "audioflingersink", GST_RANK_NONE,
+  return gst_element_register (plugin, "audioflingersink", GST_RANK_PRIMARY,
       GST_TYPE_AUDIOFLINGERSINK);
 }
 
