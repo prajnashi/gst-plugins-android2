@@ -46,6 +46,7 @@ enum
   PROP_NULL,
   PROP_VOLUME,
   PROP_MUTE,
+  PROP_AUDIO_SINK,
 };
 
 GST_DEBUG_CATEGORY_STATIC (audioflinger_debug);
@@ -82,8 +83,8 @@ static guint gst_audioflinger_sink_write (GstAudioSink * asink, gpointer data,
     guint length);
 /* static guint gst_audioflinger_sink_delay (GstAudioSink * asink); */
 static void gst_audioflinger_sink_reset (GstAudioFlingerSink * asink);
-/* static GstStateChangeReturn gst_audioflinger_sink_change_state (GstElement * */
-/*     element, GstStateChange transition); */
+static GstStateChangeReturn gst_audioflinger_sink_change_state (GstElement * 
+    element, GstStateChange transition); 
 static void gst_audioflinger_sink_set_mute (GstAudioFlingerSink *
     audioflinger_sink, gboolean mute);
 static void gst_audioflinger_sink_set_volume (GstAudioFlingerSink *
@@ -99,12 +100,7 @@ static GstStaticPadTemplate audioflingersink_sink_factory =
         "signed = (boolean) { TRUE, FALSE }, "
         "width = (int) 16, "
         "depth = (int) 16, "
-        "rate = (int) [ 1, MAX ], " "channels = (int) [ 1, 2 ]; "
-/*         "audio/x-raw-int, " */
-/*         "signed = (boolean) { TRUE, FALSE }, " */
-/*         "width = (int) 8, " */
-/*         "depth = (int) 8, " */
-/*         "rate = (int) [ 1, MAX ], " "channels = (int) [ 1, 2 ]" */ )
+        "rate = (int) [ 1, MAX ], " "channels = (int) [ 1, 2 ]; ")
     );
 
 static GstElementClass *parent_class = NULL;
@@ -185,8 +181,8 @@ gst_audioflinger_sink_class_init (GstAudioFlingerSinkClass * klass)
   gobject_class->set_property =
       GST_DEBUG_FUNCPTR (gst_audioflinger_sink_set_property);
 
-/*   gstelement_class->change_state = */
-/*       GST_DEBUG_FUNCPTR (gst_audioflinger_sink_change_state); */
+  gstelement_class->change_state = 
+      GST_DEBUG_FUNCPTR (gst_audioflinger_sink_change_state); 
   gstbasesink_class->get_caps =
       GST_DEBUG_FUNCPTR (gst_audioflinger_sink_getcaps);
 
@@ -207,19 +203,22 @@ gst_audioflinger_sink_class_init (GstAudioFlingerSinkClass * klass)
   g_object_class_install_property (gobject_class, PROP_VOLUME,
       g_param_spec_float ("volume", "Volume",
           "control volume size", 0.0, 10.0, DEFAULT_VOLUME, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_AUDIO_SINK,
+      g_param_spec_pointer("audiosink", "AudioSink",
+          "The pointer of MediaPlayerBase::AudioSink", G_PARAM_WRITABLE));
 }
 
 static void
 gst_audioflinger_sink_init (GstAudioFlingerSink * audioflinger_sink)
 {
   GST_DEBUG_OBJECT (audioflinger_sink, "initializing audioflinger_sink");
-
   gst_audioflinger_sink_reset (audioflinger_sink);
 }
 
 static void
 gst_audioflinger_sink_reset (GstAudioFlingerSink * asink)
 {
+  GST_DEBUG_OBJECT (asink, "enter");
   if (asink->audioflinger_device != NULL) {
     audioflinger_device_release (asink->audioflinger_device);
     asink->audioflinger_device = NULL;
@@ -228,6 +227,8 @@ gst_audioflinger_sink_reset (GstAudioFlingerSink * asink)
   asink->audioflinger_device = NULL;
   asink->m_volume = DEFAULT_VOLUME;
   asink->m_mute = DEFAULT_MUTE;
+  asink->m_init = FALSE;
+  asink->m_audiosink = NULL;
 }
 
 static void
@@ -241,25 +242,30 @@ gst_audioflinger_sink_finalise (GObject * object)
 }
 
 static void
-gst_audioflinger_sink_set_property (GObject * object, guint prop_id,
-    const GValue * value, GParamSpec * pspec)
+gst_audioflinger_sink_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec)
 {
   GstAudioFlingerSink *audioflinger_sink;
   gboolean val_bool;
   float val_float;
-  gchar *val_str;
+  gpointer val_pointer;
 
   audioflinger_sink = GST_AUDIOFLINGERSINK (object);
   g_return_if_fail (audioflinger_sink != NULL);
 
   switch (prop_id) {
     case PROP_MUTE:
-      val_bool = g_value_get_boolean (value);
-      gst_audioflinger_sink_set_mute (audioflinger_sink, val_bool);
+      g_value_set_boolean(value, audioflinger_sink->m_mute);
+      GST_DEBUG_OBJECT (audioflinger_sink, "get mute: %d", 
+              audioflinger_sink->m_mute);
       break;
     case PROP_VOLUME:
-      val_float = g_value_get_float (value);
-      gst_audioflinger_sink_set_volume (audioflinger_sink, val_float);
+      g_value_set_float (value, audioflinger_sink->m_volume);
+      GST_DEBUG_OBJECT (audioflinger_sink, "get volume: %f", 
+              audioflinger_sink->m_volume);
+      break;
+    case PROP_AUDIO_SINK:
+      GST_ERROR_OBJECT(audioflinger_sink, "Shall not go here!");
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -268,25 +274,43 @@ gst_audioflinger_sink_set_property (GObject * object, guint prop_id,
 }
 
 static void
-gst_audioflinger_sink_get_property (GObject * object, guint prop_id,
-    GValue * value, GParamSpec * pspec)
+gst_audioflinger_sink_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
 {
   GstAudioFlingerSink *audioflinger_sink;
   audioflinger_sink = GST_AUDIOFLINGERSINK (object);
 
   g_return_if_fail (audioflinger_sink != NULL);
-
+  GST_OBJECT_LOCK (audioflinger_sink);
   switch (prop_id) {
     case PROP_MUTE:
-      g_value_set_boolean (value, audioflinger_sink->m_mute);
+      audioflinger_sink->m_mute = g_value_get_boolean (value);
+      GST_DEBUG_OBJECT (audioflinger_sink, "set mute: %d", 
+              audioflinger_sink->m_mute);
+      /* set device if it's initialized */
+      if(audioflinger_sink->audioflinger_device && audioflinger_sink->m_init)
+        gst_audioflinger_sink_set_mute (audioflinger_sink, 
+                (int)(audioflinger_sink->m_mute));
       break;
     case PROP_VOLUME:
-      g_value_set_float (value, audioflinger_sink->m_volume);
+      audioflinger_sink->m_volume = g_value_get_float (value);
+      GST_DEBUG_OBJECT (audioflinger_sink, "set volume: %f", 
+              audioflinger_sink->m_volume);
+      /* set device if it's initialized */
+      if(audioflinger_sink->audioflinger_device && audioflinger_sink->m_init)
+        gst_audioflinger_sink_set_volume (audioflinger_sink, 
+                (int)(audioflinger_sink->m_volume*100));
       break;
+    case PROP_AUDIO_SINK:
+      audioflinger_sink->m_audiosink = g_value_get_pointer (value);
+      GST_DEBUG_OBJECT (audioflinger_sink, "set audiosink: %p", 
+              audioflinger_sink->m_audiosink);
+      break;      
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
+  GST_OBJECT_UNLOCK (audioflinger_sink);
 }
 
 static GstCaps *
@@ -296,8 +320,9 @@ gst_audioflinger_sink_getcaps (GstBaseSink * bsink)
   GstCaps *caps;
 
   audioflinger_sink = GST_AUDIOFLINGERSINK (bsink);
-
-  if (audioflinger_sink->audioflinger_device == NULL) {
+  GST_DEBUG_OBJECT (audioflinger_sink, "enter,%p", audioflinger_sink->audioflinger_device);
+  if (audioflinger_sink->audioflinger_device == NULL 
+    || audioflinger_sink->m_init == FALSE) {
     caps = gst_caps_copy (gst_pad_get_pad_template_caps (GST_BASE_SINK_PAD
             (bsink)));
   } else if (audioflinger_sink->probed_caps) {
@@ -318,12 +343,36 @@ gst_audioflinger_sink_open (GstAudioSink * asink)
   GstAudioFlingerSink *audioflinger = GST_AUDIOFLINGERSINK (asink);
   GstBaseAudioSink *baseaudiosink = (GstBaseAudioSink *) audioflinger;
 
+  GST_DEBUG_OBJECT (audioflinger, "enter");
   g_return_val_if_fail (audioflinger != NULL, FALSE);
 
   baseaudiosink->buffer_time = DEFAULT_BUFFERTIME;
   baseaudiosink->latency_time = DEFAULT_LATENCYTIME;
 
+  if (audioflinger->audioflinger_device == NULL) {
+    if (audioflinger->m_audiosink)  {
+      if (!(audioflinger->audioflinger_device = 
+            audioflinger_device_open(audioflinger->m_audiosink)))
+        goto failed_creation;
+      GST_DEBUG_OBJECT (audioflinger, "open an existed flinger, %p", 
+            audioflinger->audioflinger_device);
+    }
+    else {
+      if (!(audioflinger->audioflinger_device = audioflinger_device_create ()))
+        goto failed_creation;
+      GST_DEBUG_OBJECT (audioflinger, "create a new flinger, %p", 
+            audioflinger->audioflinger_device);
+    }
+  }
   return TRUE;
+
+  /* ERRORS */
+failed_creation:
+  {
+    GST_ELEMENT_ERROR (audioflinger, RESOURCE, SETTINGS, (NULL),
+        ("Failed to create AudioFlinger"));
+    return FALSE;
+  }  
 }
 
 static gboolean
@@ -331,12 +380,13 @@ gst_audioflinger_sink_close (GstAudioSink * asink)
 {
   GstAudioFlingerSink *audioflinger = GST_AUDIOFLINGERSINK (asink);
 
-  if (GST_AUDIOFLINGERSINK (asink)->audioflinger_device != NULL) {
-    audioflinger_device_stop (GST_AUDIOFLINGERSINK (asink)->
-        audioflinger_device);
-    audioflinger_device_release (GST_AUDIOFLINGERSINK (asink)->
-        audioflinger_device);
-    GST_AUDIOFLINGERSINK (asink)->audioflinger_device = NULL;
+  GST_DEBUG_OBJECT (audioflinger, "enter");
+
+  if (audioflinger->audioflinger_device != NULL) {
+    GST_DEBUG_OBJECT (audioflinger, "release flinger device");
+    audioflinger_device_stop (audioflinger->audioflinger_device);
+    audioflinger_device_release (audioflinger->audioflinger_device);
+    audioflinger->audioflinger_device = NULL;
   }
   return TRUE;
 }
@@ -348,26 +398,40 @@ gst_audioflinger_sink_prepare (GstAudioSink * asink, GstRingBufferSpec * spec)
 
   audioflinger = GST_AUDIOFLINGERSINK (asink);
 
-  if (audioflinger->audioflinger_device == NULL) {
-    /* we keep the audio flinger internal buffer size as  spec->segsize */
-    if (!(audioflinger->audioflinger_device =
-            audioflinger_device_create (3, spec->channels, spec->rate,
-                spec->segsize)))
-      goto failed_creation;
-  }
+  GST_DEBUG_OBJECT (audioflinger, "enter");
 
+  /* FIXME: 
+   * 
+   * Pipeline crashes in audioflinger_device_set(), after releasing audio
+   * flinger device and creating it again. In most cases, it will happen when
+   * playing the same audio again.
+   *
+   * It seems the root cause is we create and release audio flinger sink in
+   * different thread in playbin2. Till now, I haven't found way to
+   * create/release device in the same thread. Fortunately, it will not effect
+   * the gst-launch usage 
+   */
+  if( audioflinger_device_set (audioflinger->audioflinger_device, 
+        3, spec->channels, spec->rate,
+        spec->segsize) == -1)
+      goto failed_creation;
+
+  audioflinger->m_init = TRUE;
   gst_audioflinger_sink_set_volume (audioflinger, audioflinger->m_volume);
   gst_audioflinger_sink_set_mute (audioflinger, audioflinger->m_mute);
-
   spec->bytes_per_sample = (spec->width / 8) * spec->channels;
-  audioflinger->bytes_per_sample = (spec->width / 8) * spec->channels;
+  audioflinger->bytes_per_sample = spec->bytes_per_sample;
 
   GST_DEBUG_OBJECT (audioflinger,
-      "channels: %d, rate: %d, width: %d, got segsize: %d, segtotal: %d, frame count: %d, frame size: %d",
+      "channels: %d, rate: %d, width: %d, got segsize: %d, segtotal: %d, "
+      "frame count: %d, frame size: %d",
       spec->channels, spec->rate, spec->width, spec->segsize, spec->segtotal,
       audioflinger_device_frameCount (audioflinger->audioflinger_device),
       audioflinger_device_frameSize (audioflinger->audioflinger_device)
       );
+
+  GST_DEBUG_OBJECT (audioflinger, "pause device");
+  audioflinger_device_pause (audioflinger->audioflinger_device); 
 
   return TRUE;
 
@@ -391,27 +455,16 @@ gst_audioflinger_sink_unprepare (GstAudioSink * asink)
 {
   GstAudioFlingerSink *audioflinger;
 
+  GST_DEBUG_OBJECT (audioflinger, "enter");
   audioflinger = GST_AUDIOFLINGERSINK (asink);
 
-  if (!gst_audioflinger_sink_close (asink))
-    goto couldnt_close;
-
-  if (!gst_audioflinger_sink_open (asink))
-    goto couldnt_reopen;
+  if (audioflinger->audioflinger_device != NULL) {
+    GST_DEBUG_OBJECT (audioflinger, "release flinger device");
+    audioflinger_device_stop(audioflinger->audioflinger_device);
+    audioflinger->m_init = FALSE;
+  }
 
   return TRUE;
-
-  /* ERRORS */
-couldnt_close:
-  {
-    GST_DEBUG_OBJECT (asink, "Could not close the audio device");
-    return FALSE;
-  }
-couldnt_reopen:
-  {
-    GST_DEBUG_OBJECT (asink, "Could not reopen the audio device");
-    return FALSE;
-  }
 }
 
 static guint
@@ -423,8 +476,15 @@ gst_audioflinger_sink_write (GstAudioSink * asink, gpointer data, guint length)
   audioflinger = GST_AUDIOFLINGERSINK (asink);
 
   GST_INFO_OBJECT (audioflinger, "write length=%d", length);
-  if (G_UNLIKELY (audioflinger_device_stoped (audioflinger->audioflinger_device)))
-    audioflinger_device_start (audioflinger->audioflinger_device);
+
+  if (audioflinger->audioflinger_device == NULL || 
+          audioflinger->m_init == FALSE)
+  {
+    GST_WARNING_OBJECT (audioflinger, 
+            "Cannot write when device isn't initialized. Consume data");
+    return length;
+  }
+
   /* FIXME : Instead of using write, we should be using obtainBuffer/releaseBuffer
    * which gives us a more granular feedback. */
   ret =
@@ -432,7 +492,7 @@ gst_audioflinger_sink_write (GstAudioSink * asink, gpointer data, guint length)
       length);
 
   if (ret == 0) {
-    GST_WARNING ("Write failure");
+    GST_WARNING_OBJECT (audioflinger, "Write failure");
     ret = length;
   }
 
@@ -498,10 +558,13 @@ gst_audioflinger_sink_change_state (GstElement * element,
 
   switch (transition) {
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
-      if (audioflinger_device_stoped (audioflinger_sink->audioflinger_device) !=
-          0) {
+        GST_DEBUG_OBJECT (audioflinger_sink, "PAUSED_TO_PLAYING, start device");
         audioflinger_device_start (audioflinger_sink->audioflinger_device);
-      }
+        break;
+    case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+        GST_DEBUG_OBJECT (audioflinger_sink, "PLAYING_TO_PAUSED, pause device");
+        audioflinger_device_pause (audioflinger_sink->audioflinger_device);        
+        break;
     default:
       break;
   }
@@ -509,16 +572,6 @@ gst_audioflinger_sink_change_state (GstElement * element,
   ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
   if (G_UNLIKELY (ret == GST_STATE_CHANGE_FAILURE))
     goto beach;
-
-  switch (transition) {
-    case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-      if (audioflinger_device_stoped (audioflinger_sink->audioflinger_device) ==
-          0) {
-        audioflinger_device_pause (audioflinger_sink->audioflinger_device);
-      }
-    default:
-      break;
-  }
 
 beach:
   return ret;

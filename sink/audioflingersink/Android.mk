@@ -26,6 +26,8 @@ LOCAL_MODULE:= libgstaudioflingersink
 
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)   \
+	$(LOCAL_PATH)/../..   \
+	$(LOCAL_PATH)/../../log   \
 	external/gstreamer	   \
 	external/gstreamer/android	  \
 	external/gstreamer/gst	\
@@ -43,7 +45,8 @@ LOCAL_C_INCLUDES := \
 	external/gst-plugins-base/gst-libs \
 	frameworks/base/libs/audioflinger \
 	frameworks/base/media/libmediaplayerservice \
-	frameworks/base/media/libmedia
+	frameworks/base/media/libmedia	\
+	frameworks/base/include/media
 
 
 LOCAL_CFLAGS := \

@@ -28,53 +28,46 @@
 extern "C" {
 #endif
 
-typedef struct _AudioFlingerDevice
-{
-  void *audio_device;
-  int streamType;
-  int channelCount;
-  uint32_t sampleRate;
-  int bufferCount;
-} AudioFlingerDevice;
+typedef void* AudioFlingerDeviceHandle;
 
-AudioFlingerDevice * audioflinger_device_create(int streamType,
-    int channelCount,uint32_t sampleRate,int bufferCount);
+AudioFlingerDeviceHandle audioflinger_device_create();
 
-int audioflinger_device_release(AudioFlingerDevice * audiodev);
+AudioFlingerDeviceHandle audioflinger_device_open(void* audio_sink);
 
-void audioflinger_device_start(AudioFlingerDevice * audiodev);
+int audioflinger_device_set (AudioFlingerDeviceHandle handle, 
+  int streamType, int channelCount, uint32_t sampleRate, int bufferCount);
 
-void audioflinger_device_stop(AudioFlingerDevice * audiodev);
+void audioflinger_device_release(AudioFlingerDeviceHandle handle);
 
-int  audioflinger_device_stoped(AudioFlingerDevice * audiodev);
+void audioflinger_device_start(AudioFlingerDeviceHandle handle);
 
-ssize_t  audioflinger_device_write(AudioFlingerDevice * audiodev, 
+void audioflinger_device_stop(AudioFlingerDeviceHandle handle);
+
+ssize_t  audioflinger_device_write(AudioFlingerDeviceHandle handle, 
     const void* buffer, size_t size);
 
-void audioflinger_device_flush(AudioFlingerDevice * audiodev);
+void audioflinger_device_flush(AudioFlingerDeviceHandle handle);
 
-void audioflinger_device_pause(AudioFlingerDevice * audiodev);
+void audioflinger_device_pause(AudioFlingerDeviceHandle handle);
 
-void audioflinger_device_mute(AudioFlingerDevice * audiodev, int mute);
+void audioflinger_device_mute(AudioFlingerDeviceHandle handle, int mute);
 
-int  audioflinger_device_muted(AudioFlingerDevice * audiodev);
+int  audioflinger_device_muted(AudioFlingerDeviceHandle handle);
 
-void audioflinger_device_set_volume(AudioFlingerDevice * audiodev, 
+void audioflinger_device_set_volume(AudioFlingerDeviceHandle handle, 
     float left, float right);
 
-int audioflinger_device_frameCount(AudioFlingerDevice * audiodev);
+int audioflinger_device_frameCount(AudioFlingerDeviceHandle handle);
 
-int audioflinger_device_frameSize(AudioFlingerDevice * audiodev);
+int audioflinger_device_frameSize(AudioFlingerDeviceHandle handle);
 
-int64_t audioflinger_device_latency(AudioFlingerDevice * audiodev);
+int64_t audioflinger_device_latency(AudioFlingerDeviceHandle handle);
 
-int audioflinger_device_streamType(AudioFlingerDevice * audiodev);
- 
-int audioflinger_device_format(AudioFlingerDevice * audiodev);
+int audioflinger_device_format(AudioFlingerDeviceHandle handle);
 
-int audioflinger_device_channelCount(AudioFlingerDevice * audiodev);
+int audioflinger_device_channelCount(AudioFlingerDeviceHandle handle);
 
-uint32_t  audioflinger_device_sampleRate(AudioFlingerDevice * audiodev);
+uint32_t  audioflinger_device_sampleRate(AudioFlingerDeviceHandle handle);
 
 #ifdef __cplusplus
 }

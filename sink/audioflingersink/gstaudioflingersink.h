@@ -39,10 +39,12 @@ typedef struct _GstAudioFlingerSinkClass GstAudioFlingerSinkClass;
 struct _GstAudioFlingerSink {
   GstAudioSink    sink;
 
-  AudioFlingerDevice *audioflinger_device;
+  AudioFlingerDeviceHandle audioflinger_device;
+  gboolean   m_init;
   gint   bytes_per_sample;
   gfloat m_volume;
   gboolean   m_mute;
+  gpointer   m_audiosink;
   GstCaps *probed_caps;
 };
 

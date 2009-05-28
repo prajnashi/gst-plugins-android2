@@ -16,201 +16,321 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-
+#define ENABLE_GST_PLAYER_LOG
 #include <media/AudioTrack.h>
 #include <utils/Log.h>
 #include <AudioFlinger.h>
+#include <MediaPlayerInterface.h>
+#include <MediaPlayerService.h>
 #include "audioflinger_wrapper.h"
 #include <glib/glib.h>
+#include <GstLog.h>
 
 using namespace android;
 
-/* commonly used macro */
-#define DEV_TRACK(audiodev) ((AudioTrack *) audiodev->audio_device)
-
-AudioFlingerDevice *
-audioflinger_device_create (int streamType, int channelCount,
-    uint32_t sampleRate, int bufferCount)
+typedef struct _AudioFlingerDevice
 {
-  AudioFlingerDevice *audiodev = NULL;
-  int format = AudioSystem::PCM_16_BIT;
+  AudioTrack* audio_track;
+  bool init;
+  sp<MediaPlayerBase::AudioSink> audio_sink;
+} AudioFlingerDevice;
+
+
+/* commonly used macro */
+#define AUDIO_FLINGER_DEVICE(handle) ((AudioFlingerDevice*)handle)
+#define AUDIO_FLINGER_DEVICE_TRACK(handle) \
+    (AUDIO_FLINGER_DEVICE(handle)->audio_track)
+#define AUDIO_FLINGER_DEVICE_SINK(handle) \
+    (AUDIO_FLINGER_DEVICE(handle)->audio_sink)
+
+
+AudioFlingerDeviceHandle audioflinger_device_create()
+{
+  AudioFlingerDevice* audiodev = NULL;
   AudioTrack *audiotr = NULL;
-  status_t status = NO_ERROR;
 
-  /* create a new instance of AudioFlinger */
-  AudioFlinger::instantiate ();
-
-  audiodev = (AudioFlingerDevice *) malloc (sizeof (AudioFlingerDevice));
+  // create a new instance of AudioFlinger 
+  audiodev = new AudioFlingerDevice;
   if (audiodev == NULL) {
+    GST_PLAYER_ERROR("Error to create AudioFlingerDevice\n");
     return NULL;
   }
 
-  /* create AudioTrack */
+  // create AudioTrack
   audiotr = new AudioTrack ();
   if (audiotr == NULL) {
+    GST_PLAYER_ERROR("Error to create AudioTrack\n");
     return NULL;
   }
 
-  /* bufferCount is not the number of internal buffer, but the internal
-   * buffer size
-   */
-  status =
-      audiotr->set (streamType, sampleRate, format, channelCount, bufferCount);
-  if (status != NO_ERROR) {
-    return NULL;
-  }
+  audiodev->init = false;
+  audiodev->audio_track = (AudioTrack *) audiotr;
+  audiodev->audio_sink = 0;
+  GST_PLAYER_DEBUG("Create AudioTrack successfully\n");
 
-  audiodev->streamType = streamType;
-  audiodev->channelCount = channelCount;
-  audiodev->sampleRate = sampleRate;
-  audiodev->bufferCount = bufferCount;
-  audiodev->audio_device = (AudioTrack *) audiotr;
-
-  return audiodev;
+  return (AudioFlingerDeviceHandle)audiodev;
 }
 
-int
-audioflinger_device_release (AudioFlingerDevice * audiodev)
+AudioFlingerDeviceHandle audioflinger_device_open(void* audio_sink)
 {
-  g_return_val_if_fail (audiodev != NULL, 0);
+  AudioFlingerDevice* audiodev = NULL;
 
-  if (audiodev->audio_device != NULL)
-    delete ((AudioTrack *) audiodev->audio_device);
+  // audio_sink shall be an MediaPlayerBase::AudioSink instance
+  if(audio_sink == NULL)
+    return NULL;
 
-  free (audiodev);
+  // create a new instance of AudioFlinger 
+  audiodev = new AudioFlingerDevice;
+  if (audiodev == NULL) {
+    GST_PLAYER_ERROR("Error to create AudioFlingerDevice\n");
+    return NULL;
+  }
+
+  // set AudioSink
+  audiodev->audio_track = NULL;
+  audiodev->audio_sink = (MediaPlayerBase::AudioSink*)audio_sink;
+  audiodev->init = false;
+  GST_PLAYER_DEBUG("Open AudioSink successfully\n");
+
+  return (AudioFlingerDeviceHandle)audiodev;    
+}
+
+int audioflinger_device_set (AudioFlingerDeviceHandle handle, 
+  int streamType, int channelCount, uint32_t sampleRate, int bufferCount)
+{
+  status_t status = NO_ERROR;
+
+  int format = AudioSystem::PCM_16_BIT;
+
+  if (handle == NULL)
+      return -1;
+
+  if(AUDIO_FLINGER_DEVICE_TRACK(handle)) {
+    // bufferCount is not the number of internal buffer, but the internal
+    // buffer size 
+    status = AUDIO_FLINGER_DEVICE_TRACK(handle)->set(streamType, sampleRate, 
+        format, channelCount, bufferCount);
+    GST_PLAYER_DEBUG("Set AudioTrack, status: %d, streamType: %d, sampleRate: %d, "
+        "channelCount: %d, bufferCount: %d\n", status, streamType, sampleRate, 
+        channelCount, bufferCount);
+  }
+  else if(AUDIO_FLINGER_DEVICE_SINK(handle).get()) {
+    status = AUDIO_FLINGER_DEVICE_SINK(handle)->open(sampleRate, channelCount, 
+        format, bufferCount);
+    GST_PLAYER_DEBUG("Set AudioSink, status: %d, streamType: %d, sampleRate: %d," 
+        "channelCount: %d, bufferCount: %d\n", status, streamType, sampleRate, 
+        channelCount, bufferCount);
+  }
+
+  if (status != NO_ERROR) 
+    return -1;
+
+  AUDIO_FLINGER_DEVICE(handle)->init = true;
 
   return 0;
 }
 
-
-void
-audioflinger_device_start (AudioFlingerDevice * audiodev)
+void audioflinger_device_release (AudioFlingerDeviceHandle handle)
 {
-  g_return_if_fail (audiodev != NULL);
+  if (handle == NULL)
+    return;
 
-  DEV_TRACK(audiodev)->start();
-}
+  GST_PLAYER_DEBUG("Enter\n");
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    GST_PLAYER_DEBUG("Release AudioTrack\n");
+    delete AUDIO_FLINGER_DEVICE_TRACK(handle);
+  }
 
-void
-audioflinger_device_stop (AudioFlingerDevice * audiodev)
-{
-  g_return_if_fail (audiodev != NULL);
 
-  DEV_TRACK(audiodev)->stop();
-}
-
-int
-audioflinger_device_stoped (AudioFlingerDevice * audiodev)
-{
-  g_return_val_if_fail (audiodev != NULL, 0);
-
-  return (int) DEV_TRACK(audiodev)->stopped ();
-}
-
-void
-audioflinger_device_flush (AudioFlingerDevice * audiodev)
-{
-  g_return_if_fail (audiodev != NULL);
-
-  DEV_TRACK(audiodev)->flush();
-}
-
-void
-audioflinger_device_pause (AudioFlingerDevice * audiodev)
-{
-  g_return_if_fail (audiodev != NULL);
-
-  DEV_TRACK(audiodev)->pause();
-}
-
-void
-audioflinger_device_mute (AudioFlingerDevice * audiodev, int mute)
-{
-  g_return_if_fail (audiodev != NULL);
-
-  DEV_TRACK(audiodev)->mute((bool) mute);
-}
-
-int
-audioflinger_device_muted (AudioFlingerDevice * audiodev)
-{
-  g_return_val_if_fail (audiodev != NULL, 0);
-
-  return (int) DEV_TRACK(audiodev)->muted ();
+  if (AUDIO_FLINGER_DEVICE_SINK(handle).get()) {
+    GST_PLAYER_DEBUG("Release AudioSink\n");
+    AUDIO_FLINGER_DEVICE_SINK(handle).clear();
+  }
+  
+  delete AUDIO_FLINGER_DEVICE(handle);
 }
 
 
-void
-audioflinger_device_set_volume (AudioFlingerDevice * audiodev, float left,
+void audioflinger_device_start (AudioFlingerDeviceHandle handle)
+{
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return;
+
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    AUDIO_FLINGER_DEVICE_TRACK(handle)->start();
+  }
+  else {
+    AUDIO_FLINGER_DEVICE_SINK(handle)->start();
+  }
+}
+
+void audioflinger_device_stop (AudioFlingerDeviceHandle handle)
+{
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return;
+
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    AUDIO_FLINGER_DEVICE_TRACK(handle)->stop();
+  }
+  else {
+    AUDIO_FLINGER_DEVICE_SINK(handle)->stop();
+  }
+}
+
+void audioflinger_device_flush (AudioFlingerDeviceHandle handle)
+{
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return;
+
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    AUDIO_FLINGER_DEVICE_TRACK(handle)->flush();
+  }
+  else {
+    AUDIO_FLINGER_DEVICE_SINK(handle)->flush();
+  }
+}
+
+void audioflinger_device_pause (AudioFlingerDeviceHandle handle)
+{
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return;
+
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    AUDIO_FLINGER_DEVICE_TRACK(handle)->pause();
+  }
+  else {
+    AUDIO_FLINGER_DEVICE_SINK(handle)->pause();
+  }  
+}
+
+void audioflinger_device_mute (AudioFlingerDeviceHandle handle, int mute)
+{
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return;
+
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    AUDIO_FLINGER_DEVICE_TRACK(handle)->mute((bool)mute);
+  }
+  else {
+    // do nothing here, because the volume/mute is set in media service layer
+  }    
+}
+
+int audioflinger_device_muted (AudioFlingerDeviceHandle handle)
+{
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+      return -1;
+
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    return (int) AUDIO_FLINGER_DEVICE_TRACK(handle)->muted ();
+  }
+  else {
+    // do nothing here, because the volume/mute is set in media service layer
+    return -1;
+  }      
+}
+
+
+void audioflinger_device_set_volume (AudioFlingerDeviceHandle handle, float left,
     float right)
 {
-  g_return_if_fail (audiodev != NULL);
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return;
 
-  DEV_TRACK(audiodev)->setVolume (left, right);
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    AUDIO_FLINGER_DEVICE_TRACK(handle)->setVolume (left, right);
+  }
+  else {
+    // do nothing here, because the volume/mute is set in media service layer
+    return;
+  }        
 }
 
-ssize_t
-audioflinger_device_write (AudioFlingerDevice * audiodev, const void *buffer,
+ssize_t audioflinger_device_write (AudioFlingerDeviceHandle handle, const void *buffer,
     size_t size)
 {
-  g_return_val_if_fail (audiodev != NULL, -1);
-  g_return_val_if_fail (buffer != NULL, -1);
-
-  return DEV_TRACK(audiodev)->write (buffer, size);
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return -1;
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    return AUDIO_FLINGER_DEVICE_TRACK(handle)->write(buffer, size);
+  }
+  else {
+    return AUDIO_FLINGER_DEVICE_SINK(handle)->write(buffer, size);
+  }  
 }
 
-int
-audioflinger_device_frameCount (AudioFlingerDevice * audiodev)
+int audioflinger_device_frameCount (AudioFlingerDeviceHandle handle)
 {
-  g_return_val_if_fail (audiodev != NULL, -1);
-
-  return DEV_TRACK(audiodev)->frameCount ();
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return -1;
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    return (int)AUDIO_FLINGER_DEVICE_TRACK(handle)->frameCount();
+  }
+  else {
+    return (int)AUDIO_FLINGER_DEVICE_SINK(handle)->frameCount();
+  } 
 }
 
-int
-audioflinger_device_frameSize (AudioFlingerDevice * audiodev)
+int audioflinger_device_frameSize (AudioFlingerDeviceHandle handle)
 {
-  g_return_val_if_fail (audiodev != NULL, -1);
-
-  return DEV_TRACK(audiodev)->frameSize ();
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return -1;
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    return (int)AUDIO_FLINGER_DEVICE_TRACK(handle)->frameSize();
+  }
+  else {
+    return (int)AUDIO_FLINGER_DEVICE_SINK(handle)->frameSize();
+  }   
 }
 
-int64_t
-audioflinger_device_latency (AudioFlingerDevice * audiodev)
+int64_t audioflinger_device_latency (AudioFlingerDeviceHandle handle)
 {
-  g_return_val_if_fail (audiodev != NULL, -1);
-
-  return (int64_t) DEV_TRACK(audiodev)->latency();
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return -1;
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    return (int64_t)AUDIO_FLINGER_DEVICE_TRACK(handle)->latency();
+  }
+  else {
+    return (int64_t)AUDIO_FLINGER_DEVICE_SINK(handle)->latency();
+  }     
 }
 
-int
-audioflinger_device_streamType (AudioFlingerDevice * audiodev)
+int audioflinger_device_format (AudioFlingerDeviceHandle handle)
 {
-  g_return_val_if_fail (audiodev != NULL, -1);
-
-  return DEV_TRACK(audiodev)->streamType();
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return -1;
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    return (int)AUDIO_FLINGER_DEVICE_TRACK(handle)->format();
+  }
+  else {
+    // do nothing here, MediaPlayerBase::AudioSink doesn't provide format()
+    // interface
+    return -1;
+  }       
 }
 
-int
-audioflinger_device_format (AudioFlingerDevice * audiodev)
+int audioflinger_device_channelCount (AudioFlingerDeviceHandle handle)
 {
-  g_return_val_if_fail (audiodev != NULL, -1);
-
-  return DEV_TRACK(audiodev)->format();
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return -1;
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    return (int)AUDIO_FLINGER_DEVICE_TRACK(handle)->channelCount();
+  }
+  else {
+    return (int)AUDIO_FLINGER_DEVICE_SINK(handle)->channelCount();
+  }  
 }
 
-int
-audioflinger_device_channelCount (AudioFlingerDevice * audiodev)
+uint32_t audioflinger_device_sampleRate (AudioFlingerDeviceHandle handle)
 {
-  g_return_val_if_fail (audiodev != NULL, -1);
-
-  return DEV_TRACK(audiodev)->channelCount();
-}
-
-uint32_t
-audioflinger_device_sampleRate (AudioFlingerDevice * audiodev)
-{
-  g_return_val_if_fail (audiodev != NULL, -1);
-
-  return DEV_TRACK(audiodev)->sampleRate();
+  if (handle == NULL || AUDIO_FLINGER_DEVICE(handle)->init == false)
+    return 0;
+  if (AUDIO_FLINGER_DEVICE_TRACK(handle))  {
+    return (int)AUDIO_FLINGER_DEVICE_TRACK(handle)->sampleRate();
+  }
+  else {
+    // do nothing here, MediaPlayerBase::AudioSink doesn't provide sampleRate()
+    // interface
+    return -1;
+  }
 }
