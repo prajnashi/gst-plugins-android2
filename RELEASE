@@ -1,0 +1,162 @@
+Pre-release of GStreamer Android 0.10.22.01
+
+Gstreamer modules of this release
+    * glib-2.13.0
+    * gstreamer-0.10.22
+    * gst-plugins-base-0.10.22
+    * gst-plugins-good-0.10.14
+    * gst-plugins-bad-0.10.10
+    * gst-plugins-ugly-0.10.11
+    * gst-ffmpeg-0.10.7
+    * gst-openmax-0.10.0.4
+    * gst-plugins-android
+    * libid3tag-0.15.1b
+    * libmad-0.15.1b
+    * libogg-1.1.3
+    * liboil-0.3.11
+    * ffmpeg
+    * gnonlin-0.10.10
+    
+Android's base:
+    * android-1.5
+  
+Features of this release
+    * Support following plugins in gst-plugins-base, gst-plugins-base, 
+      gst-plugin-bad, and gst-plugin-ugly. Other plugins will be added in the 
+      future
+      - gst-plugins-base
+            videorate
+            playback
+            audioconvert
+            audiorate
+            gdp
+            videoscale
+            audioresample
+            ffmpegcolorspace
+            volume
+            speexresample
+            videotestsrc
+            app
+            typefind
+            audiotestsrc
+            ogg
+      - gst-plugin-good
+            id3demux
+            videofilter
+            qtdemux
+            wavparse
+      - gst-plugin-bad
+            selector
+            fbdev
+      - gst-plugin-ugly
+            mad
+    * gst-openmax cannot work in this release, because the dependency opencore's
+      OMX components are upgrade. Please use gst-ffmpeg, libmad, libogg as 
+      decoder. 
+    * Add playbin2 based gstreamer MediaPlayerService glue layer in 
+      gst-plugins-android. Currently, only audio playback is support. Video 
+      playback is under development. 
+    * Refine gstaudioflingersink to support android MediaPlayerBase::AudioSink
+      interface
+    * Change android's "frameworks/base/media" to integrate gstreamer player 
+      into android's multimedia framework.
+    * Extend max share library loaded in a process from 64 to 128 in "bionic"
+    * Add a new rule BUILD_PLUGIN_LIBRARY in android's "build"
+    * 
+
+Known Issues:
+    * Music playback in Java player is not smooth.
+
+Contributors to this release
+    * Prajnashi
+    * Edward Hervey
+   
+Gstreamer Android Homepage
+    http://groups.google.com/group/prajnashi
+    
+Gstreamer Android Source Code
+    http://github.com/prajnashi/
+        
+--------------------------------------------------------------------------------
+Step by Step to Setup Environment
+
+Before go ahead, go through basic knowledge of android's build system and 
+install required tools (https://sites.google.com/a/android.com/opensource/download)
+
+* Get source & build. Android 1.5 base will build failed, if you upgrade from 
+  Ubuntu 8.10 -> 9.04, refer http://groups.google.com/group/android-platform/browse_thread/thread/bf053c4b4df3d055
+  to resolve it
+  $ mkdir ~/mydroid && cd ~/mydroid
+  $ repo -u git://github.com/prajnashi/android-gst-manifest.git
+  $ repo sync
+  $ make
+  
+* Start emulator
+  - Setup environment
+  $ export ANDROID_PRODUCT_OUT=~/mydroid/out/target/product/generic
+  $ export PATH=~/mydroid/out/host/linux-x86/bin/:${PATH}
+  $ export LD_LIBRARY_PATH=~/mydroid/out/host/linux-x86/lib:${LD_LIBRARY_PATH}
+
+  - Create sdcard.img
+  $ mksdcard 16M sdcard.img
+
+  - Start emulator & push medias into sdcard
+  $ emulator -sdcard sdcard.img &
+  $ adb push 1.m4a /sdcard
+  
+* Test gstreamer in command mode
+  $ adb shell
+    - export gst environment
+    # export GST_PLUGIN_PATH=/system/plugins
+    # export GST_REGISTRY_UPDATE=1
+    # export GST_REGISTRY=/sdcard/reg.bin
+    
+    - list plugins
+    # gst-inspect-0.10
+    
+    - try simple pipelines and android's sink elements
+    # gst-launch-0.10 fakesrc ! fakesink
+    # gst-launch-0.10 audiotestsrc freq=8000 ! audioflingersink
+    # gst-launch-0.10 videotestsrc ! surfaceflingersink
+    
+    - play audio files
+    # gst-launch-0.10 filesrc location=1.m4a ! qtdemux ! queue ! ffdec_aac ! audioflingersink
+    
+    - play video only files
+    # gst-launch-0.10 filesrc location=1.3gp ! qtdemux ! queue ! ffdec_h263 ! ffmpegcolorspace ! surfaceflingersink
+
+    - play audio + video files
+    # gst-launch-0.10 filesrc location=av.mp4 ! qtdemux name=demux demux. ! ffdec_aac ! audioflingersink demux. ! ffdec_mpeg4 ! ffmpegcolorspace ! surfaceflingersink
+    
+* Test gstreamer in Java application
+  - edit gst-plugins-android/player/gst.conf, which is used to configure gstreamer
+    environment. You can open/close logs of any components in gst.conf
+    
+  - switch opencore to gstreamer. Android's MediaPlayerService will load gst
+    player, if find gst.conf in /sdcard
+    $ push gst-plugins-android/player/gst.conf /sdcard
+    $ kill </system/bin/mediaserver>
+    
+  - catch log
+    $ adb logcat -c
+    $ adb logcat -v time tag thread brief > log
+    
+  - lauch Music from emulator's UI, play an m4a file, then find what's in log :-)
+    
+* Debug & development
+  - Update new binararies into emulator
+    $ adb shell
+        # mount -o rw,remount -t yaffs2 /dev/block/mtdblock03 /system
+        # exit
+    $ adb sync
+  
+    
+  
+  
+
+
+
+
+
+
+

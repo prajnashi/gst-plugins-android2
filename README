@@ -1,0 +1,22 @@
+WHAT IT IS
+----------
+This is gstreamer plugin and multimedia media glue layer for android.
+
+WHERE TO START
+--------------
+We have a website at
+http://groups.google.com/group/prajnashi
+
+For general information about gstreamer, start from
+http://gstreamer.freedesktop.org/
+
+PLUG-IN DEPENDENCIES AND LICENSES
+---------------------------------
+gst-plugin-android is developed under the terms of the LGPL (see LICENSE file 
+for details). When using GPL-linked plug-ins, GStreamer is for all practical reasons
+under the GPL itself.
+
+
+
+
+
