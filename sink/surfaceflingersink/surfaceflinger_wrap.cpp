@@ -16,8 +16,7 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
- 
-#define LOG_TAG "surfacewrapper"
+//#define ENABLE_GST_PLAYER_LOG
 #include <ui/ISurface.h>
 #include <ui/Surface.h>
 #include <ui/SurfaceComposerClient.h>
@@ -25,6 +24,7 @@
 #include <utils/MemoryHeapBase.h>
 #include <cutils/log.h>
 #include "surfaceflinger_wrap.h"
+#include <GstLog.h>
 
 using namespace android;
 
@@ -44,22 +44,6 @@ typedef struct
 
 /* max frame buffers */
 #define  MAX_FRAME_BUFFERS     2
-
-/* map wrapper layer's log to android's log system */
-static const char* short_file_name = "surfaceflinger_wrap.cpp";
-  
-
-#define SF_ERROR(fmt, args...) \
-    LOGE("%s, %s, (%d): "fmt, short_file_name, __FUNCTION__,  __LINE__, ##args)
-#define SF_WARNING(fmt, args...) \
-    LOGW("%s, %s, (%d): "fmt, short_file_name, __FUNCTION__,  __LINE__, ##args)
-#define  SF_INFO(fmt, args...) \
-    LOGI("%s, %s, (%d): "fmt, short_file_name, __FUNCTION__,  __LINE__, ##args)
-#define  SF_DEBUG(fmt, args...) \
-    LOGD("%s, %s, (%d): "fmt, short_file_name, __FUNCTION__,  __LINE__, ##args)
-#define  SF_LOG(fmt, args...)  \
-    LOGV("%s, %s, (%d): "fmt, short_file_name, __FUNCTION__,  __LINE__, ##args)
-
 
 static int videoflinger_device_create_new_surface(VideoFlingerDevice* videodev);
 
@@ -86,7 +70,7 @@ VideoFlingerDeviceHandle videoflinger_device_create(void* isurface)
 {
     VideoFlingerDevice *videodev = NULL;
 
-    SF_INFO("Enter\n");
+    GST_PLAYER_INFO("Enter\n");
     videodev = new VideoFlingerDevice;
     if (videodev == NULL)
     {
@@ -106,7 +90,7 @@ VideoFlingerDeviceHandle videoflinger_device_create(void* isurface)
         videodev->frame_offset[i] = 0;
     }
 
-    SF_INFO("Leave\n");
+    GST_PLAYER_INFO("Leave\n");
     return (VideoFlingerDeviceHandle)videodev;    
 }
 
@@ -117,7 +101,7 @@ int videoflinger_device_create_new_surface(VideoFlingerDevice* videodev)
     status_t state;
     int pid = getpid();
 
-    SF_INFO("Enter\n");
+    GST_PLAYER_INFO("Enter\n");
 
     /* Create a new Surface object with 320x240
      * TODO: Create surface according to device's screen size and rotate it
@@ -126,7 +110,7 @@ int videoflinger_device_create_new_surface(VideoFlingerDevice* videodev)
     sp<SurfaceComposerClient> videoClient = new SurfaceComposerClient;
     if (videoClient.get() == NULL)
     {
-        SF_ERROR("Fail to create SurfaceComposerClient\n");
+        GST_PLAYER_ERROR("Fail to create SurfaceComposerClient\n");
         return -1;
     }
 
@@ -146,7 +130,7 @@ int videoflinger_device_create_new_surface(VideoFlingerDevice* videodev)
             ISurfaceComposer::eFXSurfaceNormal|ISurfaceComposer::ePushBuffers);
     if (videodev->surface.get() == NULL)
     {
-        SF_ERROR("Fail to create Surface\n");
+        GST_PLAYER_ERROR("Fail to create Surface\n");
         return -1;
     }
 
@@ -157,7 +141,7 @@ int videoflinger_device_create_new_surface(VideoFlingerDevice* videodev)
     state =  videodev->surface->setLayer(INT_MAX);
     if (state != NO_ERROR)
     {
-        SF_INFO("videoSurface->setLayer(), state = %d", state);
+        GST_PLAYER_INFO("videoSurface->setLayer(), state = %d", state);
         videodev->surface.clear();
         return -1;
     }
@@ -167,7 +151,7 @@ int videoflinger_device_create_new_surface(VideoFlingerDevice* videodev)
     state =  videodev->surface->setLayer(INT_MAX);
     if (state != NO_ERROR)
     {
-        SF_INFO("videoSurface->show(), state = %d", state);
+        GST_PLAYER_INFO("videoSurface->show(), state = %d", state);
         videodev->surface.clear();
         return -1;
     }
@@ -180,13 +164,13 @@ int videoflinger_device_create_new_surface(VideoFlingerDevice* videodev)
     /* Smart pointer videoClient shall be deleted automatically
      * when function exists
      */
-    SF_INFO("Leave\n");
+    GST_PLAYER_INFO("Leave\n");
     return 0;
 }
 
 int videoflinger_device_release(VideoFlingerDeviceHandle handle)
 {
-    SF_INFO("Enter");
+    GST_PLAYER_INFO("Enter");
     
     if (handle == NULL)
     {
@@ -204,7 +188,7 @@ int videoflinger_device_release(VideoFlingerDeviceHandle handle)
     /* delete device */
     delete videodev;
 
-    SF_INFO("Leave");
+    GST_PLAYER_INFO("Leave");
     return 0;
 }
 
@@ -213,10 +197,10 @@ int videoflinger_device_register_framebuffers(VideoFlingerDeviceHandle handle,
 {
     int surface_format = 0;
 
-    SF_INFO("Enter");
+    GST_PLAYER_INFO("Enter");
     if (handle == NULL)
     {
-        SF_ERROR("videodev is NULL");
+        GST_PLAYER_ERROR("videodev is NULL");
         return -1;
     }
    
@@ -225,7 +209,7 @@ int videoflinger_device_register_framebuffers(VideoFlingerDeviceHandle handle,
      */
     if (format !=  VIDEO_FLINGER_RGB_565 )
     {
-        SF_ERROR("Unsupport format: %d", format);
+        GST_PLAYER_ERROR("Unsupport format: %d", format);
         return -1;
     }
     surface_format = PIXEL_FORMAT_RGB_565;
@@ -252,7 +236,7 @@ int videoflinger_device_register_framebuffers(VideoFlingerDeviceHandle handle,
 
     /* use double buffer in post */
     int frameSize = videodev->width * videodev->height * 2;
-    SF_INFO( 
+    GST_PLAYER_INFO( 
         "format=%d, width=%d, height=%d, hor_stride=%d, ver_stride=%d, frameSize=%d",
         videodev->format,
         videodev->width,
@@ -265,7 +249,7 @@ int videoflinger_device_register_framebuffers(VideoFlingerDeviceHandle handle,
     videodev->frame_heap = new MemoryHeapBase(frameSize * MAX_FRAME_BUFFERS);
     if (videodev->frame_heap->heapID() < 0) 
     {
-        SF_ERROR("Error creating frame buffer heap!");
+        GST_PLAYER_ERROR("Error creating frame buffer heap!");
         return -1;
     }
 
@@ -280,7 +264,7 @@ int videoflinger_device_register_framebuffers(VideoFlingerDeviceHandle handle,
 
     if (videodev->isurface->registerBuffers(buffers) < 0 )
     {
-        SF_ERROR("Cannot register frame buffer!");
+        GST_PLAYER_ERROR("Cannot register frame buffer!");
         videodev->frame_heap.clear();
         return -1;
     }
@@ -290,14 +274,14 @@ int videoflinger_device_register_framebuffers(VideoFlingerDeviceHandle handle,
         videodev->frame_offset[i] = i*frameSize;
     }
     videodev->buf_index = 0;
-    SF_INFO("Leave");
+    GST_PLAYER_INFO("Leave");
 
     return 0;
 }
 
 void videoflinger_device_unregister_framebuffers(VideoFlingerDeviceHandle handle)
 {
-    SF_INFO("Enter");
+    GST_PLAYER_INFO("Enter");
 
     if (handle == NULL)
     {
@@ -307,14 +291,14 @@ void videoflinger_device_unregister_framebuffers(VideoFlingerDeviceHandle handle
     VideoFlingerDevice* videodev = (VideoFlingerDevice*)handle;
     if (videodev->frame_heap.get())
     {
-        SF_INFO("Unregister frame buffers.  videodev->isurface = %p", videodev->isurface.get());
+        GST_PLAYER_INFO("Unregister frame buffers.  videodev->isurface = %p", videodev->isurface.get());
         
         /* release ISurface */
-        SF_INFO("Unregister frame buffer");
+        GST_PLAYER_INFO("Unregister frame buffer");
         videodev->isurface->unregisterBuffers();
 
         /* release MemoryHeapBase */
-        SF_INFO("Clear frame buffers.");
+        GST_PLAYER_INFO("Clear frame buffers.");
         videodev->frame_heap.clear();
 
         /* reset offset */
@@ -331,12 +315,12 @@ void videoflinger_device_unregister_framebuffers(VideoFlingerDeviceHandle handle
         videodev->buf_index = 0;
     }
 
-    SF_INFO("Leave");
+    GST_PLAYER_INFO("Leave");
 }
 
 void videoflinger_device_post(VideoFlingerDeviceHandle handle, void * buf, int bufsize)
 {
-    SF_INFO("Enter");
+    GST_PLAYER_INFO("Enter");
     
     if (handle == NULL)
     {
@@ -350,8 +334,8 @@ void videoflinger_device_post(VideoFlingerDeviceHandle handle, void * buf, int b
    
     memcpy (static_cast<unsigned char *>(videodev->frame_heap->base()) + videodev->frame_offset[videodev->buf_index],  buf, bufsize);
 
-    SF_INFO ("Post buffer[%d].\n", videodev->buf_index);
+    GST_PLAYER_INFO ("Post buffer[%d].\n", videodev->buf_index);
     videodev->isurface->postBuffer(videodev->frame_offset[videodev->buf_index]);
 
-    SF_INFO("Leave");
+    GST_PLAYER_INFO("Leave");
 }

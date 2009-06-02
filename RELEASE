@@ -23,7 +23,7 @@ Android's base:
 Features of this release
     * Support following plugins in gst-plugins-base, gst-plugins-base, 
       gst-plugin-bad, and gst-plugin-ugly. Other plugins will be added in the 
-      future
+      future. For more information, check "Gst Elements in this release section"
       - gst-plugins-base
             videorate
             playback
@@ -50,6 +50,7 @@ Features of this release
             fbdev
       - gst-plugin-ugly
             mad
+            mp3parse
     * gst-openmax cannot work in this release, because the dependency opencore's
       OMX components are upgrade. Please use gst-ffmpeg, libmad, libogg as 
       decoder. 
@@ -65,7 +66,10 @@ Features of this release
     * 
 
 Known Issues:
-    * Music playback in Java player is not smooth.
+    * Music playback in Java player is not smooth. (performance issue)
+    * Video playback in Java player cannot stretch to full screen
+    * gst-openmax cannot work
+    * ffdec_h264 make pipeline crash
 
 Contributors to this release
     * Prajnashi
@@ -83,26 +87,28 @@ Step by Step to Setup Environment
 Before go ahead, go through basic knowledge of android's build system and 
 install required tools (https://sites.google.com/a/android.com/opensource/download)
 
+* Install Android 1.5 sdk
+
 * Get source & build. Android 1.5 base will build failed, if you upgrade from 
   Ubuntu 8.10 -> 9.04, refer http://groups.google.com/group/android-platform/browse_thread/thread/bf053c4b4df3d055
   to resolve it
   $ mkdir ~/mydroid && cd ~/mydroid
-  $ repo -u git://github.com/prajnashi/android-gst-manifest.git
+  $ repo init -u git://github.com/prajnashi/android-gst-manifest.git
   $ repo sync
   $ make
   
 * Start emulator
   - Setup environment
   $ export ANDROID_PRODUCT_OUT=~/mydroid/out/target/product/generic
-  $ export PATH=~/mydroid/out/host/linux-x86/bin/:${PATH}
-  $ export LD_LIBRARY_PATH=~/mydroid/out/host/linux-x86/lib:${LD_LIBRARY_PATH}
+  $ export PATH=<android_1.5_sdk>/tools:${PATH}
 
-  - Create sdcard.img
-  $ mksdcard 16M sdcard.img
+  - Create sdcard image for emulator (refer to follow instruction)
+    http://blog.jayway.com/2009/04/22/working-with-sd-cards-in-the-android-emulator/
+    More information about android AVD in 1.5:
+    http://developer.android.com/guide/developing/tools/avd.html
 
-  - Start emulator & push medias into sdcard
-  $ emulator -sdcard sdcard.img &
-  $ adb push 1.m4a /sdcard
+  - Start emulator & push medias into sdcard $ emulator -sdcard sdcard.img & $
+  adb push 1.m4a /sdcard
   
 * Test gstreamer in command mode
   $ adb shell
@@ -121,12 +127,13 @@ install required tools (https://sites.google.com/a/android.com/opensource/downlo
     
     - play audio files
     # gst-launch-0.10 filesrc location=1.m4a ! qtdemux ! queue ! ffdec_aac ! audioflingersink
+    # gst-launch-0.10 filesrc location=/sdcard/2.mp3 ! mp3parse ! mad ! audioconvert ! audioflingersink
     
     - play video only files
     # gst-launch-0.10 filesrc location=1.3gp ! qtdemux ! queue ! ffdec_h263 ! ffmpegcolorspace ! surfaceflingersink
 
     - play audio + video files
-    # gst-launch-0.10 filesrc location=av.mp4 ! qtdemux name=demux demux. ! ffdec_aac ! audioflingersink demux. ! ffdec_mpeg4 ! ffmpegcolorspace ! surfaceflingersink
+    # gst-launch-0.10 filesrc location=1.mp4 ! qtdemux name=demux demux. ! queue ! ffdec_aac ! audioflingersink demux. ! queue ! ffdec_mpeg4 ! ffmpegcolorspace ! surfaceflingersink
     
 * Test gstreamer in Java application
   - edit gst-plugins-android/player/gst.conf, which is used to configure gstreamer
@@ -141,7 +148,10 @@ install required tools (https://sites.google.com/a/android.com/opensource/downlo
     $ adb logcat -c
     $ adb logcat -v time tag thread brief > log
     
-  - lauch Music from emulator's UI, play an m4a file, then find what's in log :-)
+  - launch Music from emulator's UI, play an m4a file, then find what's in log
+    :-)
+
+  - to test video playback, download and install a Video Player from google store
     
 * Debug & development
   - Update new binararies into emulator
@@ -149,14 +159,205 @@ install required tools (https://sites.google.com/a/android.com/opensource/downlo
         # mount -o rw,remount -t yaffs2 /dev/block/mtdblock03 /system
         # exit
     $ adb sync
-  
-    
-  
-  
+        # kill <mediaserver>
 
+--------------------------------------------------------------------------------
+Gst Elements in this release
 
+mpegaudioparse:  mp3parse: MPEG1 Audio Parser
+mpegaudioparse:  xingmux: MP3 Xing muxer
+gdp:  gdpdepay: GDP Depayloader
+gdp:  gdppay: GDP Payloader
+audioresample:  audioresample: Audio resampler
+uridecodebin:  decodebin2: Decoder Bin
+uridecodebin:  uridecodebin: URI Decoder
+tcp:  tcpclientsink: TCP client sink
+tcp:  tcpclientsrc: TCP client source
+tcp:  tcpserversink: TCP server sink
+tcp:  tcpserversrc: TCP server source
+tcp:  multifdsink: Multi filedescriptor sink
+videoflip:  videoflip: Video flipper
+audioconvert:  audioconvert: Audio converter
+videoscale:  videoscale: Video scaler
+playback:  playbin: Player Bin
+playback:  playbin2: Player Bin 2
+selector:  input-selector: Input selector
+selector:  output-selector: Output selector
+ogg:  oggdemux: Ogg demuxer
+ogg:  oggmux: Ogg muxer
+ogg:  ogmaudioparse: OGM audio stream parser
+ogg:  ogmvideoparse: OGM video stream parser
+ogg:  ogmtextparse: OGM text stream parser
+ogg:  oggparse: Ogg parser
+ogg:  oggaviparse: Ogg AVI parser
+id3demux:  id3demux: ID3 tag demuxer
+coreindexers:  memindex: A index that stores entries in memory
+audiorate:  audiorate: Audio rate adjuster
+quicktime:  qtdemux: QuickTime demuxer
+surfaceflingersink:  surfaceflingersink: android's surface flinger sink
+fbdevsink:  fbdevsink: fbdev video sink
+typefindfunctions: video/x-ms-asf: asf, wm, wma, wmv
+typefindfunctions: audio/x-musepack: mpc, mpp, mp+
+typefindfunctions: audio/x-au: au, snd
+typefindfunctions: video/x-msvideo: avi
+typefindfunctions: audio/qcelp: qcp
+typefindfunctions: video/x-cdxa: dat
+typefindfunctions: video/x-vcd: dat
+typefindfunctions: audio/x-imelody: imy, ime, imelody
+typefindfunctions: audio/midi: mid, midi
+typefindfunctions: video/x-fli: flc, fli
+typefindfunctions: application/x-id3v2: mp3, mp2, mp1, mpga, ogg, flac, tta
+typefindfunctions: application/x-id3v1: mp3, mp2, mp1, mpga, ogg, flac, tta
+typefindfunctions: application/x-apetag: ape, mpc, wv
+typefindfunctions: audio/x-ttafile: tta
+typefindfunctions: audio/x-mod: 669, amf, dsm, gdm, far, imf, it, med, mod, mtm, okt, sam, s3m, stm, stx, ult, xm
+typefindfunctions: audio/mpeg: mp3, mp2, mp1, mpga
+typefindfunctions: audio/x-ac3: ac3
+typefindfunctions: video/mpeg-sys: mpe, mpeg, mpg
+typefindfunctions: video/mpegts: ts
+typefindfunctions: application/ogg: anx, ogg, ogm
+typefindfunctions: video/mpeg-elementary: mpv, mpeg, mpg
+typefindfunctions: video/mpeg4: m4v
+typefindfunctions: video/x-h264: h264, x264, 264
+typefindfunctions: video/x-nuv: nuv
+typefindfunctions: audio/x-m4a: m4a
+typefindfunctions: application/x-3gp: 3gp
+typefindfunctions: video/quicktime: mov
+typefindfunctions: image/x-quicktime: qif, qtif, qti
+typefindfunctions: image/jp2: jp2
+typefindfunctions: video/mj2: mj2
+typefindfunctions: text/html: htm, html
+typefindfunctions: application/vnd.rn-realmedia: ra, ram, rm, rmvb
+typefindfunctions: application/x-pn-realaudio: ra, ram, rm, rmvb
+typefindfunctions: application/x-shockwave-flash: swf, swfl
+typefindfunctions: video/x-flv: flv
+typefindfunctions: text/plain: txt
+typefindfunctions: text/uri-list: ram
+typefindfunctions: application/sdp: sdp
+typefindfunctions: application/smil: smil
+typefindfunctions: application/xml: xml
+typefindfunctions: audio/x-wav: wav
+typefindfunctions: audio/x-aiff: aiff, aif, aifc
+typefindfunctions: audio/x-svx: iff, svx
+typefindfunctions: audio/x-paris: paf
+typefindfunctions: audio/x-nist: nist
+typefindfunctions: audio/x-voc: voc
+typefindfunctions: audio/x-sds: sds
+typefindfunctions: audio/x-ircam: sf
+typefindfunctions: audio/x-w64: w64
+typefindfunctions: audio/x-shorten: shn
+typefindfunctions: application/x-ape: ape
+typefindfunctions: image/jpeg: jpg, jpe, jpeg
+typefindfunctions: image/gif: gif
+typefindfunctions: image/png: png
+typefindfunctions: image/bmp: bmp
+typefindfunctions: image/tiff: tif, tiff
+typefindfunctions: video/x-matroska: mkv, mka
+typefindfunctions: application/mxf: mxf
+typefindfunctions: video/x-mve: mve
+typefindfunctions: video/x-dv: dv, dif
+typefindfunctions: audio/x-amr-nb-sh: amr
+typefindfunctions: audio/x-amr-wb-sh: amr
+typefindfunctions: audio/iLBC-sh: ilbc
+typefindfunctions: audio/x-sid: sid
+typefindfunctions: image/x-xcf: xcf
+typefindfunctions: video/x-mng: mng
+typefindfunctions: image/x-jng: jng
+typefindfunctions: image/x-xpixmap: xpm
+typefindfunctions: image/x-sun-raster: ras
+typefindfunctions: application/x-bzip: bz2
+typefindfunctions: application/x-gzip: gz
+typefindfunctions: application/zip: zip
+typefindfunctions: application/x-compress: Z
+typefindfunctions: application/x-kate: no extensions
+typefindfunctions: audio/x-flac: flac
+typefindfunctions: audio/x-vorbis: no extensions
+typefindfunctions: video/x-theora: no extensions
+typefindfunctions: application/x-ogm-video: no extensions
+typefindfunctions: application/x-ogm-audio: no extensions
+typefindfunctions: application/x-ogm-text: no extensions
+typefindfunctions: audio/x-speex: no extensions
+typefindfunctions: audio/x-celt: no extensions
+typefindfunctions: application/x-ogg-skeleton: no extensions
+typefindfunctions: text/x-cmml: no extensions
+typefindfunctions: application/x-executable: no extensions
+typefindfunctions: adts_mpeg_stream: aac
+typefindfunctions: audio/x-spc: spc
+typefindfunctions: audio/x-wavpack: wv, wvp
+typefindfunctions: audio/x-wavpack-correction: wvc
+typefindfunctions: application/x-rar: rar
+typefindfunctions: application/x-tar: tar
+typefindfunctions: application/x-ar: a
+typefindfunctions: application/x-ms-dos-executable: dll, exe, ocx, sys, scr, msstyles, cpl
+typefindfunctions: video/x-dirac: no extensions
+typefindfunctions: multipart/x-mixed-replace: no extensions
+typefindfunctions: application/x-mmsh: no extensions
+typefindfunctions: video/vivo: viv
+typefindfunctions: audio/x-nsf: nsf
+typefindfunctions: application/pdf: pdf
+typefindfunctions: application/msword: doc
+typefindfunctions: application/octet-stream: DS_Store
+gnonlin:  gnlsource: GNonLin Source
+gnonlin:  gnlcomposition: GNonLin Composition
+gnonlin:  gnloperation: GNonLin Operation
+gnonlin:  gnlfilesource: GNonLin File Source
+videorate:  videorate: Video rate adjuster
+ffmpeg:  ffenc_h263: FFMPEG H.263 / H.263-1996 encoder
+ffmpeg:  ffenc_h263p: FFMPEG H.263+ / H.263-1998 / H.263 version 2 encoder
+ffmpeg:  ffenc_mpeg1video: FFMPEG MPEG-1 video encoder
+ffmpeg:  ffenc_mpeg2video: FFMPEG MPEG-2 video encoder
+ffmpeg:  ffenc_mpeg4: FFMPEG MPEG-4 part 2 encoder
+ffmpeg:  ffenc_msmpeg4v1: FFMPEG MPEG-4 part 2 Microsoft variant version 1 encoder
+ffmpeg:  ffenc_msmpeg4v2: FFMPEG MPEG-4 part 2 Microsoft variant version 2 encoder
+ffmpeg:  ffenc_msmpeg4: FFMPEG MPEG-4 part 2 Microsoft variant version 3 encoder
+ffmpeg:  ffenc_wmv1: FFMPEG Windows Media Video 7 encoder
+ffmpeg:  ffenc_wmv2: FFMPEG Windows Media Video 8 encoder
+ffmpeg:  ffdec_h263: FFMPEG H.263 / H.263-1996, H.263+ / H.263-1998 / H.263 version 2 decoder
+ffmpeg:  ffdec_h263i: FFMPEG Intel H.263 decoder
+ffmpeg:  ffdec_h264: FFMPEG H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 decoder
+ffmpeg:  ffdec_mpeg2video: FFMPEG MPEG-2 video decoder
+ffmpeg:  ffdec_mpeg4: FFMPEG MPEG-4 part 2 decoder
+ffmpeg:  ffdec_mpegvideo: FFMPEG MPEG-1 video decoder
+ffmpeg:  ffdec_msmpeg4v1: FFMPEG MPEG-4 part 2 Microsoft variant version 1 decoder
+ffmpeg:  ffdec_msmpeg4v2: FFMPEG MPEG-4 part 2 Microsoft variant version 2 decoder
+ffmpeg:  ffdec_msmpeg4: FFMPEG MPEG-4 part 2 Microsoft variant version 3 decoder
+ffmpeg:  ffdec_vc1: FFMPEG SMPTE VC-1 decoder
+ffmpeg:  ffdec_wmv1: FFMPEG Windows Media Video 7 decoder
+ffmpeg:  ffdec_wmv2: FFMPEG Windows Media Video 8 decoder
+ffmpeg:  ffdec_wmv3: FFMPEG Windows Media Video 9 decoder
+ffmpeg:  ffdec_aac: FFMPEG Advanced Audio Coding decoder
+ffmpeg:  ffdeinterlace: FFMPEG Deinterlace element
+ffmpeg:  ffaudioresample: FFMPEG Audio resampling element
+coreelements:  capsfilter: CapsFilter
+coreelements:  fakesrc: Fake Source
+coreelements:  fakesink: Fake Sink
+coreelements:  fdsrc: Filedescriptor Source
+coreelements:  fdsink: Filedescriptor Sink
+coreelements:  filesrc: File Source
+coreelements:  identity: Identity
+coreelements:  queue: Queue
+coreelements:  filesink: File Sink
+coreelements:  tee: Tee pipe fitting
+coreelements:  typefind: TypeFind
+coreelements:  multiqueue: MultiQueue
+omx:  omx_dummy: OpenMAX IL dummy element
+omx:  omx_mpeg4dec: OpenMAX IL MPEG-4 video decoder
+omx:  omx_h263dec: OpenMAX IL H.263 video decoder
+omx:  omx_h264dec: OpenMAX IL H.264/AVC video decoder
+omx:  omx_amrnbdec: OpenMAX IL AMR-NB audio decoder
+omx:  omx_amrwbdec: OpenMAX IL AMR-WB audio decoder
+omx:  omx_aacdec: OpenMAX IL AAC audio decoder
+wavparse:  wavparse: WAV audio demuxer
+volume:  volume: Volume
+audiotestsrc:  audiotestsrc: Audio test source
+audioflingersink:  audioflingersink: Audio Sink (AudioFlinger)
+app:  appsrc: AppSrc
+app:  appsink: AppSink
+ffmpegcolorspace:  ffmpegcolorspace: FFMPEG Colorspace converter
+mad:  mad: mad mp3 decoder
+mad:  id3mux: id3 tag muxer
+videotestsrc:  videotestsrc: Video test source
+staticelements:  bin: Generic bin
+staticelements:  pipeline: Pipeline object
 
-
-
-
-
+Total count: 32 plugins, 195 features

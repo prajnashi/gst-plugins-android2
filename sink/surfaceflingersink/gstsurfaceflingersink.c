@@ -321,8 +321,8 @@ gst_surfaceflinger_sink_class_init (GstSurfaceFlingerSinkClass * klass)
         GST_DEBUG_FUNCPTR (gst_surfaceflinger_sink_change_state);
 
     g_object_class_install_property (gobject_class, PROP_SURFACE,
-        g_param_spec_pointer("surface", "display surface",
-        "The video display surface view", G_PARAM_READWRITE));
+        g_param_spec_pointer("surface", "Surface",
+        "The pointer of ISurface interface", G_PARAM_READWRITE));
 
     gstvs_class->set_caps = GST_DEBUG_FUNCPTR (gst_surfaceflinger_sink_setcaps);
     gstvs_class->get_caps = GST_DEBUG_FUNCPTR (gst_surfaceflinger_sink_getcaps);

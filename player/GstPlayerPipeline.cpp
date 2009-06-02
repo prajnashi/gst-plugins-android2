@@ -42,13 +42,8 @@ using namespace android;
 #define PAGESIZE            4096
 #endif
 
-/* TODO:
- * Tomorrow: make pipeline can start successfully. Test one audio, one video, one a+v
- */
-
 // make sure gst can be initialized only once
 static gboolean gst_inited = FALSE;
-// static int gfd = 0;
 
 // ----------------------------------------------------------------------------
 // helper functions to redirect gstreamer log to android's log system
@@ -576,7 +571,7 @@ bool GstPlayerPipeline::create_pipeline ()
         GST_PLAYER_ERROR ("Failed to create surfaceflingersink\n");
         goto ERROR;
     }
-    g_object_set (mPlayBin, "video-sink", mAudioSink, NULL);
+    g_object_set (mPlayBin, "video-sink", mVideoSink, NULL);
 
     GST_PLAYER_DEBUG ("Pipeline is created successfully\n");
 
@@ -764,6 +759,7 @@ bool GstPlayerPipeline::setDataSource(int fd, int64_t offset, int64_t length)
 
 bool GstPlayerPipeline::setAudioSink(sp<MediaPlayerInterface::AudioSink> audiosink)
 {
+    LOCK (&mActionMutex);    
     if(audiosink == 0)
     {
         GST_PLAYER_ERROR("Error audio sink %p", audiosink.get());
@@ -787,23 +783,37 @@ bool GstPlayerPipeline::setAudioSink(sp<MediaPlayerInterface::AudioSink> audiosi
     GST_PLAYER_DEBUG("MediaPlayerInterface::AudioSink: %p\n", mAudioOut.get());
     g_object_set (mAudioSink, "audiosink", mAudioOut.get(), NULL);
 
+    UNLOCK (&mActionMutex);
     return true; 
 }
 
 bool GstPlayerPipeline::setVideoSurface(const sp<ISurface>& surface)
 {
-    GST_PLAYER_ERROR ("Not implemented yet!\n");
     LOCK (&mActionMutex);
-      
-    // TODO: add code here
+    if(surface == 0)
+    {
+        GST_PLAYER_ERROR("Error ISurface %p", surface.get());
+        return false;
+    }
+
+    if (!mPlayBin) 
+    {
+        GST_PLAYER_ERROR ("Pipeline not initialized\n");
+        return false;
+    }  
+    // set ISurface
+    GST_PLAYER_DEBUG("ISurface: %p\n", surface.get());
+    g_object_set (mVideoSink, "surface", surface.get(), NULL);
+
     UNLOCK (&mActionMutex);
 
-    return FALSE;
+    return false;
 }
 
 bool GstPlayerPipeline::prepare()
 {
     bool ret = false;
+
     GstStateChangeReturn state_return;
        
     LOCK (&mActionMutex);
@@ -837,10 +847,21 @@ bool GstPlayerPipeline::prepare()
 
     // send prepare done message
     if (mGstPlayer)
+    {
+        int width = 0;
+        int height = 0;
+
+        // get video size
+        if (getVideoSize(&width, &height))
+        {
+            GST_PLAYER_DEBUG("Send MEDIA_SET_VIDEO_SIZE, width (%d), height (%d)", width, height);
+            mGstPlayer->sendEvent(MEDIA_SET_VIDEO_SIZE, width, height);
+        }
         mGstPlayer->sendEvent(MEDIA_PREPARED);
 
-    ret = true;
+    }
 
+    ret = true;
 EXIT:
     UNLOCK (&mActionMutex);
     return ret;
@@ -1058,9 +1079,51 @@ EXIT:
 
 bool GstPlayerPipeline::getVideoSize(int *w, int *h)
 {
-    // TODO: implement it
-    GST_PLAYER_ERROR ("Not implemented yet!\n");
-    return  false;    
+    bool ret = false;
+    GstPad* pad = NULL;
+    GstStructure* struc = NULL;
+
+    if (!mPlayBin || !mVideoSink) 
+    { 
+        GST_PLAYER_ERROR ("Pipeline not initialized\n");
+        goto EXIT;
+    }
+    
+    pad = gst_element_get_static_pad(mVideoSink, "sink");
+    if (pad == NULL)
+    {
+        GST_PLAYER_ERROR ("Cannot get sink pad from video sink\n");
+        goto EXIT;
+    }
+
+    struc = gst_caps_get_structure(GST_PAD_CAPS(pad), 0);
+    if (struc == NULL)
+    {
+        GST_PLAYER_ERROR ("Cannot get structure from video sink\n");
+        goto EXIT;
+    }        
+    GST_PLAYER_DEBUG("Sink caps: %s\n", gst_caps_to_string(GST_PAD_CAPS(pad)));
+
+    if (gst_structure_get_int(struc, "width", w) != TRUE)
+    {
+        GST_PLAYER_ERROR ("Cannot get width from caps\n");
+        *w = *h = 0;
+        goto EXIT;
+    }
+    if (gst_structure_get_int(struc, "height", h) != TRUE)
+    {
+        GST_PLAYER_ERROR ("Cannot get width from caps\n");
+        *w = *h = 0;
+        goto EXIT;
+    }
+    GST_PLAYER_DEBUG("width: %d, height: %d\n", *w, *h);
+    
+    ret = true; 
+EXIT:    
+    if(pad)
+        gst_object_unref(pad);
+
+    return ret;    
 }
 
 
@@ -1253,10 +1316,20 @@ void GstPlayerPipeline::handleStateChanged(GstMessage* p_msg)
             newstate == GST_STATE_PAUSED && 
             (pending == GST_STATE_VOID_PENDING || pending == GST_STATE_PLAYING) )
     {
+        int width = 0;
+        int height = 0;
         GST_PLAYER_DEBUG("prepareAsynch() done, send MEDIA_PREPARED event\n");
         mAsynchPreparePending = false;
         if (mGstPlayer)
+        {
+            // get video size
+            if(getVideoSize(&width, &height))
+            {
+                GST_PLAYER_DEBUG("Send MEDIA_SET_VIDEO_SIZE, width (%d), height (%d)", width, height);
+                mGstPlayer->sendEvent(MEDIA_SET_VIDEO_SIZE, width, height);
+            }            
             mGstPlayer->sendEvent(MEDIA_PREPARED);
+        }
     }   
 
     // seekTo

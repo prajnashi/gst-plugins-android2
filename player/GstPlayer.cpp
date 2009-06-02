@@ -1,5 +1,4 @@
-/* GStreamer
- * Copyright (C) <2009> Prajnashi S <prajnashi@gmail.com>
+/* GStreamer Copyright (C) <2009> Prajnashi S <prajnashi@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -124,7 +123,7 @@ EXIT:
 
 status_t GstPlayer::setVideoSurface(const sp<ISurface>& surface)
 {
-    GST_PLAYER_DEBUG("setVideoSurface(%p)\n", surface.get());
+    GST_PLAYER_DEBUG("ISurface: %p\n", surface.get());
     mSurface = surface;
     return OK;
 }

@@ -26,6 +26,7 @@ LOCAL_TOP_PATH := $(LOCAL_PATH)/../../../
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)   \
     $(LOCAL_PATH)/../..   \
+    $(LOCAL_PATH)/../../log   \
     $(LOCAL_TOP_PATH)/gstreamer       \
     $(LOCAL_TOP_PATH)/gstreamer/android  \
     $(LOCAL_TOP_PATH)/gstreamer/gst	\
@@ -74,6 +75,7 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)   \
     $(LOCAL_PATH)/../..   \
+    $(LOCAL_PATH)/../../log   \
     $(LOCAL_TOP_PATH)/../../frameworks/base/media/libmediaplayerservice	\
     $(LOCAL_TOP_PATH)/../../frameworks/base/media/libmedia
 
